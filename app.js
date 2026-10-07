@@ -3,13 +3,13 @@ const BOT_NAME = "Nexus";
 let currentMode = 'chat';
 let chatHistory = [];
 
-// 1. Get a free API key at https://aistudio.google.com/
-const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE";
+// Get a free API key at https://console.groq.com/keys
+const GROQ_API_KEY = "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";
 
-// 2. Get a free HF token at https://huggingface.co/settings/tokens (for image generation)
-const HF_TOKEN = "YOUR_HUGGINGFACE_TOKEN_HERE";
+// Get a free HF token at https://huggingface.co/settings/tokens
+const HF_TOKEN = "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";
 
-// CORS Proxy URL to allow GitHub Pages to hit Hugging Face without CORS errors
+// Public CORS Proxy wrapper to allow Hugging Face image calls from GitHub Pages
 const CORS_PROXY = "https://corsproxy.io/?";
 
 const DEFAULT_WELCOME = {
@@ -135,38 +135,40 @@ async function send() {
     }
 }
 
-// Chat API via Google Gemini (Natively supports CORS on frontend/GitHub Pages)
+// Chat API via Groq Cloud (Free, high speed, and supports browser CORS)
 async function fetchChatResponse(promptText) {
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
-        throw new Error("Missing GEMINI_API_KEY! Please set your key in app.js.");
+    if (!GROQ_API_KEY || GROQ_API_KEY === "YOUR_GROQ_API_KEY_HERE") {
+        throw new Error("Missing GROQ_API_KEY. Please add your free key to app.js");
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
-
-    const response = await fetch(url, {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Authorization": `Bearer ${GROQ_API_KEY}`,
+            "Content-Type": "application/json"
+        },
         body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }],
-            systemInstruction: {
-                parts: [{ text: `You are ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}.` }]
-            }
+            model: "llama-3.3-70b-versatile",
+            messages: [
+                { role: "system", content: `You are ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}.` },
+                { role: "user", content: promptText }
+            ]
         })
     });
 
     if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error?.message || "Failed to get response from Gemini API.");
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || "Failed to reach AI server.");
     }
 
-    const result = await response.json();
-    return result.candidates[0].content.parts[0].text;
+    const data = await response.json();
+    return data.choices[0].message.content;
 }
 
 // Image Generation via Hugging Face routed through CORS Proxy
 async function generateRealImage(promptText) {
     if (!HF_TOKEN || HF_TOKEN === "YOUR_HUGGINGFACE_TOKEN_HERE") {
-        throw new Error("Missing HF_TOKEN! Set your token in app.js for image generation.");
+        throw new Error("Missing HF_TOKEN! Please add your key to app.js");
     }
 
     const targetUrl = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell";
@@ -182,7 +184,7 @@ async function generateRealImage(promptText) {
     });
 
     if (!response.ok) {
-        throw new Error("Image API request failed. Ensure your HF token is valid.");
+        throw new Error("Image API request failed. Check your HF token.");
     }
 
     const blob = await response.blob();
