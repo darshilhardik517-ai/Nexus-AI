@@ -138,7 +138,7 @@ async function send() {
 // Chat API via Groq Cloud (Free, high speed, and supports browser CORS)
 async function fetchChatResponse(promptText) {
     if (!GROQ_API_KEY || GROQ_API_KEY === "YOUR_GROQ_API_KEY_HERE") {
-        throw new Error("Missing GROQ_API_KEY. Please add your free key to app.js");
+        throw new Error("Missing GROQ_API_KEY. Please add your key to app.js");
     }
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -148,7 +148,7 @@ async function fetchChatResponse(promptText) {
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+            model: "llama-3.1-8b-instant",
             messages: [
                 { role: "system", content: `You are ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}.` },
                 { role: "user", content: promptText }
