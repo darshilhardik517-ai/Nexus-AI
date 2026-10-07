@@ -3,9 +3,6 @@ const BOT_NAME = "Nexus";
 let currentMode = 'chat';
 let chatHistory = [];
 
-// Get your free access token at https://huggingface.co/settings/tokens
-const HF_TOKEN = "YOUR_FREE_HUGGINGFACE_TOKEN_HERE";
-
 const DEFAULT_WELCOME = {
     sender: 'bot',
     type: 'text',
@@ -101,7 +98,7 @@ async function send() {
     const win = document.getElementById('chat-window');
     const loadingMsg = document.createElement('div');
     loadingMsg.className = 'msg bot';
-    loadingMsg.innerText = currentMode === 'image' ? `${BOT_NAME} is generating artwork via AI model...` : `${BOT_NAME} is thinking...`;
+    loadingMsg.innerText = currentMode === 'image' ? `${BOT_NAME} is generating artwork...` : `${BOT_NAME} is thinking...`;
     win.appendChild(loadingMsg);
     win.scrollTop = win.scrollHeight;
 
@@ -112,11 +109,13 @@ async function send() {
             chatHistory.push({ sender: 'bot', type: 'text', content: formatted });
 
         } else if (currentMode === 'image') {
-            const imageUrl = await generateRealImage(text);
+            const encodedPrompt = encodeURIComponent(text);
+            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
+            
             const imgHtml = `
                 <strong>AI Generated Image:</strong><br>
                 <div class="media-box">
-                    <img src="${imageUrl}" alt="${escapeHtml(text)}">
+                    <img src="${imageUrl}" alt="${escapeHtml(text)}" loading="lazy">
                 </div>
             `;
             chatHistory.push({ sender: 'bot', type: 'image', content: imgHtml });
@@ -129,61 +128,18 @@ async function send() {
     }
 }
 
-// Chat API Logic
+// Open CORS-friendly Chat API via Pollinations AI
 async function fetchChatResponse(promptText) {
-    const headers = { "Content-Type": "application/json" };
-    if (HF_TOKEN && HF_TOKEN !== "YOUR_FREE_HUGGINGFACE_TOKEN_HERE") {
-        headers["Authorization"] = `Bearer ${HF_TOKEN}`;
-    }
-
-    const response = await fetch(
-        "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-Coder-32B-Instruct",
-        {
-            headers: headers,
-            method: "POST",
-            body: JSON.stringify({
-                inputs: promptText,
-                parameters: { max_new_tokens: 500, return_full_text: false }
-            }),
-        }
-    );
+    const systemPrompt = `You are ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}. Answer accurately and concisely.`;
+    
+    const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(promptText)}?system=${encodeURIComponent(systemPrompt)}`);
 
     if (!response.ok) {
-        throw new Error("Unable to connect to chat API. Please ensure your HF_TOKEN is configured in app.js.");
+        throw new Error("Unable to connect to AI server. Please check your internet connection.");
     }
 
-    const result = await response.json();
-    if (Array.isArray(result) && result[0]?.generated_text) {
-        return result[0].generated_text;
-    }
-    return `I am ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}. How can I assist you further?`;
-}
-
-// Image Generation API Logic
-async function generateRealImage(promptText) {
-    if (!HF_TOKEN || HF_TOKEN === "YOUR_FREE_HUGGINGFACE_TOKEN_HERE") {
-        throw new Error("Missing HF_TOKEN! Get a free token at huggingface.co/settings/tokens and paste it into app.js.");
-    }
-
-    const response = await fetch(
-        "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell",
-        {
-            headers: {
-                Authorization: `Bearer ${HF_TOKEN}`,
-                "Content-Type": "application/json",
-            },
-            method: "POST",
-            body: JSON.stringify({ inputs: promptText }),
-        }
-    );
-
-    if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || "Model loading or rate limited. Please try again in a few seconds.");
-    }
-
-    const blob = await response.blob();
-    return URL.createObjectURL(blob);
+    const text = await response.text();
+    return text || `I am ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}. How can I assist you further?`;
 }
 
 function copyCode(button) {
