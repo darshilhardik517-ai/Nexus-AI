@@ -3,6 +3,15 @@ const BOT_NAME = "Nexus";
 let currentMode = 'chat';
 let chatHistory = [];
 
+// 1. Get a free API key at https://aistudio.google.com/
+const GEMINI_API_KEY = "YOUR_GEMINI_API_KEY_HERE";
+
+// 2. Get a free HF token at https://huggingface.co/settings/tokens (for image generation)
+const HF_TOKEN = "YOUR_HUGGINGFACE_TOKEN_HERE";
+
+// CORS Proxy URL to allow GitHub Pages to hit Hugging Face without CORS errors
+const CORS_PROXY = "https://corsproxy.io/?";
+
 const DEFAULT_WELCOME = {
     sender: 'bot',
     type: 'text',
@@ -109,13 +118,11 @@ async function send() {
             chatHistory.push({ sender: 'bot', type: 'text', content: formatted });
 
         } else if (currentMode === 'image') {
-            const encodedPrompt = encodeURIComponent(text);
-            const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=600&nologo=true&seed=${Math.floor(Math.random() * 1000000)}`;
-            
+            const imageUrl = await generateRealImage(text);
             const imgHtml = `
                 <strong>AI Generated Image:</strong><br>
                 <div class="media-box">
-                    <img src="${imageUrl}" alt="${escapeHtml(text)}" loading="lazy">
+                    <img src="${imageUrl}" alt="${escapeHtml(text)}">
                 </div>
             `;
             chatHistory.push({ sender: 'bot', type: 'image', content: imgHtml });
@@ -128,18 +135,58 @@ async function send() {
     }
 }
 
-// Open CORS-friendly Chat API via Pollinations AI
+// Chat API via Google Gemini (Natively supports CORS on frontend/GitHub Pages)
 async function fetchChatResponse(promptText) {
-    const systemPrompt = `You are ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}. Answer accurately and concisely.`;
-    
-    const response = await fetch(`https://text.pollinations.ai/${encodeURIComponent(promptText)}?system=${encodeURIComponent(systemPrompt)}`);
-
-    if (!response.ok) {
-        throw new Error("Unable to connect to AI server. Please check your internet connection.");
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === "YOUR_GEMINI_API_KEY_HERE") {
+        throw new Error("Missing GEMINI_API_KEY! Please set your key in app.js.");
     }
 
-    const text = await response.text();
-    return text || `I am ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}. How can I assist you further?`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            systemInstruction: {
+                parts: [{ text: `You are ${BOT_NAME}, an AI assistant developed by ${DEVELOPER_NAME}.` }]
+            }
+        })
+    });
+
+    if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error?.message || "Failed to get response from Gemini API.");
+    }
+
+    const result = await response.json();
+    return result.candidates[0].content.parts[0].text;
+}
+
+// Image Generation via Hugging Face routed through CORS Proxy
+async function generateRealImage(promptText) {
+    if (!HF_TOKEN || HF_TOKEN === "YOUR_HUGGINGFACE_TOKEN_HERE") {
+        throw new Error("Missing HF_TOKEN! Set your token in app.js for image generation.");
+    }
+
+    const targetUrl = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-schnell";
+    const proxiedUrl = CORS_PROXY + encodeURIComponent(targetUrl);
+
+    const response = await fetch(proxiedUrl, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${HF_TOKEN}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ inputs: promptText }),
+    });
+
+    if (!response.ok) {
+        throw new Error("Image API request failed. Ensure your HF token is valid.");
+    }
+
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
 }
 
 function copyCode(button) {
